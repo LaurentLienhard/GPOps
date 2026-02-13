@@ -71,6 +71,61 @@ Public functions follow the PowerShell advanced function pattern:
 - Verbose and Debug output support
 - Error handling with proper exit codes
 
+### Naming Conventions
+
+#### Function Naming - REQUIRED MODULE PREFIX
+
+**All public functions MUST be prefixed with `GPOps` to avoid naming conflicts.**
+
+**Format**: `<Verb>-GPOps<Noun>`
+
+**Examples:**
+- ✅ `Get-GPOpsInfo` - Get GPO information
+- ✅ `Link-GPOpsToOU` - Link a GPO to an organizational unit
+- ✅ `Unlink-GPOpsFromOU` - Unlink a GPO from an organizational unit
+- ✅ `New-GPOpsPolicy` - Create a new GPO policy
+- ✅ `Remove-GPOpsPolicy` - Remove a GPO policy
+- ✅ `Backup-GPOpsSettings` - Backup GPO settings
+- ✅ `Restore-GPOpsSettings` - Restore GPO settings
+- ✅ `Test-GPOpsHealth` - Test GPO health status
+- ✅ `Get-GPOpsReport` - Generate a GPO report
+- ✅ `Set-GPOpsPermission` - Set GPO permissions
+
+**❌ Avoid (incorrect naming):**
+- ❌ `Get-GPOInfo` - Missing module prefix
+- ❌ `GetGPOInfo` - Not Verb-Noun format
+- ❌ `Get-Info` - No context about GPO module
+
+#### Why This Matters
+
+1. **Namespace Safety**: Prevents conflicts with native `Get-GPO`, `Set-GPO`, etc. from GroupPolicy module
+2. **Clear Module Origin**: Users immediately know the function comes from GPOps
+3. **Discoverability**: `Get-Command *GPOps*` easily finds all module functions
+4. **Professional Standard**: Industry best practice for module naming
+5. **Export Control**: Makes it obvious which functions should be exported in module manifest
+
+#### Verb Selection
+
+Use standard PowerShell verbs:
+- **Query**: `Get-`, `Search-`, `Find-`
+- **Modify**: `Set-`, `New-`, `Add-`, `Remove-`, `Update-`
+- **Actions**: `Invoke-`, `Start-`, `Stop-`, `Test-`
+- **Data**: `Import-`, `Export-`, `Backup-`, `Restore-`
+
+All verbs must be from `Get-Verb` approved list.
+
+#### Private Functions
+
+Private functions (in `source/Private/`) may use simpler names without the full prefix:
+- `Resolve-GpoPath` - OK for internal use
+- `Test-AdConnection` - OK for internal use
+
+But can also use full prefix for consistency:
+- `Resolve-GPOpsPath` - Consistent with public functions
+- `Test-GPOpsAdConnection` - Consistent with public functions
+
+**Recommendation**: Use full `GPOps` prefix even for private functions for consistency.
+
 ### Code Style
 
 #### General Rules
