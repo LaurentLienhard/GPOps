@@ -150,13 +150,17 @@ function Get-GPOpsInfo
                             }
                         }
                     }
-                    catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException]
-                    {
-                        Write-Error "Remote: GPO not found: $gpoName"
-                    }
                     catch
                     {
-                        Write-Error "Remote: Failed to retrieve GPO '$gpoName': $_"
+                        # Check exception type by name since type may not be available in remote session
+                        if ($_.Exception.GetType().Name -like '*ADIdentityNotFoundException')
+                        {
+                            Write-Error "Remote: GPO not found: $gpoName"
+                        }
+                        else
+                        {
+                            Write-Error "Remote: Failed to retrieve GPO '$gpoName': $_"
+                        }
                     }
                 }
 
