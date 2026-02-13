@@ -1,0 +1,38 @@
+PS C:\Users\llienhard\Documents\01-DEV\Github\GPOps> Import-Module -FullyQualifiedName .\output\module\GPOps\0.0.1\GPOps.psm1 -Force
+Au caractère C:\Users\llienhard\Documents\01-DEV\Github\GPOps\output\module\GPOps\0.0.1\GPOps.psm1:34 : 51
++         $this.DisplayName = $ADObject.DisplayName ?? ''
++                                                   ~~
+Jeton inattendu « ?? » dans l’expression ou l’instruction.
+Au caractère C:\Users\llienhard\Documents\01-DEV\Github\GPOps\output\module\GPOps\0.0.1\GPOps.psm1:35 : 33
++         $this.Id = $ADObject.Id ?? [guid]::Empty
++                                 ~~
+Jeton inattendu « ?? » dans l’expression ou l’instruction.
+Au caractère C:\Users\llienhard\Documents\01-DEV\Github\GPOps\output\module\GPOps\0.0.1\GPOps.psm1:36 : 41
++         $this.Domain = $ADObject.Domain ?? ''
++                                         ~~
+Jeton inattendu « ?? » dans l’expression ou l’instruction.
+Au caractère C:\Users\llienhard\Documents\01-DEV\Github\GPOps\output\module\GPOps\0.0.1\GPOps.psm1:37 : 43
++         $this.Created = $ADObject.Created ?? [System.DateTime]::MinVa ...
++                                           ~~
+Jeton inattendu « ?? » dans l’expression ou l’instruction.
+Au caractère C:\Users\llienhard\Documents\01-DEV\Github\GPOps\output\module\GPOps\0.0.1\GPOps.psm1:38 : 45
++         $this.Modified = $ADObject.Modified ?? [System.DateTime]::Min ...
++                                             ~~
+Jeton inattendu « ?? » dans l’expression ou l’instruction.
+Au caractère C:\Users\llienhard\Documents\01-DEV\Github\GPOps\output\module\GPOps\0.0.1\GPOps.psm1:39 : 39
++         $this.Owner = $ADObject.Owner ?? 'Unknown'
++                                       ~~
+Jeton inattendu « ?? » dans l’expression ou l’instruction.
+Au caractère C:\Users\llienhard\Documents\01-DEV\Github\GPOps\output\module\GPOps\0.0.1\GPOps.psm1:40 : 51
++         $this.Description = $ADObject.Description ?? ''
++                                                   ~~
+Jeton inattendu « ?? » dans l’expression ou l’instruction.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : UnexpectedToken
+
+Import-Module : Le module « .\output\module\GPOps\0.0.1\GPOps.psm1 » spécifié n'a pas été chargé, car aucun fichier de module valide n'a été trouvé dans un répertoire de module.
+Au caractère Ligne:1 : 1
++ Import-Module -FullyQualifiedName .\output\module\GPOps\0.0.1\GPOps.p ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ResourceUnavailable: (.\output\module\GPOps\0.0.1\GPOps.psm1:String) [Import-Module], FileNotFoundException
+    + FullyQualifiedErrorId : Modules_ModuleNotFound,Microsoft.PowerShell.Commands.ImportModuleCommand
