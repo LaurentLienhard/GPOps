@@ -483,11 +483,13 @@ function Get-GPOpsInfo
             Write-Verbose "Executing remote command on $ComputerName"
 
             # Build Invoke-Command parameters
-            # If allNames is empty, the script block will use Get-GPO -All
+            # If allNames is empty, pass $null instead of an empty array to avoid type conversion issues
+            $namesToPass = if ($allNames.Count -gt 0) { @(,$allNames.ToArray()) } else { $null }
+
             $invokeParams = @{
                 ComputerName = $ComputerName
                 ScriptBlock  = $scriptBlock
-                ArgumentList = @(,$allNames.ToArray()), $Domain
+                ArgumentList = @($namesToPass, $Domain)
                 ErrorAction  = 'Stop'
             }
 
