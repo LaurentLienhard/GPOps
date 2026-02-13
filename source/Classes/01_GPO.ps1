@@ -29,13 +29,13 @@ class GPO
 
     GPO([object]$ADObject)
     {
-        $this.DisplayName = $ADObject.DisplayName ?? ''
-        $this.Id = $ADObject.Id ?? [guid]::Empty
-        $this.Domain = $ADObject.Domain ?? ''
-        $this.Created = $ADObject.Created ?? [System.DateTime]::MinValue
-        $this.Modified = $ADObject.Modified ?? [System.DateTime]::MinValue
-        $this.Owner = $ADObject.Owner ?? 'Unknown'
-        $this.Description = $ADObject.Description ?? ''
+        $this.DisplayName = if ($null -ne $ADObject.DisplayName) { $ADObject.DisplayName } else { '' }
+        $this.Id = if ($null -ne $ADObject.Id) { $ADObject.Id } else { [guid]::Empty }
+        $this.Domain = if ($null -ne $ADObject.Domain) { $ADObject.Domain } else { '' }
+        $this.Created = if ($null -ne $ADObject.Created) { $ADObject.Created } else { [System.DateTime]::MinValue }
+        $this.Modified = if ($null -ne $ADObject.Modified) { $ADObject.Modified } else { [System.DateTime]::MinValue }
+        $this.Owner = if ($null -ne $ADObject.Owner) { $ADObject.Owner } else { 'Unknown' }
+        $this.Description = if ($null -ne $ADObject.Description) { $ADObject.Description } else { '' }
         $this.IsEnabled = -not ($ADObject.GpoStatus -eq 'AllSettingsDisabled')
         $this.LinkedOUs = [System.Collections.Generic.List[string]]::new()
     }
