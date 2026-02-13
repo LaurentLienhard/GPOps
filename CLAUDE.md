@@ -165,12 +165,130 @@ function Get-Example
 5. **Full build**: `./build.ps1` performs build and test validation
 6. **Commit messages** control versioning via GitVersion regex patterns in GitVersion.yml
 
+## Testing Guidelines
+
+### Test Requirements
+- **Every function (Public and Private) and every class must have a corresponding Pester test file**
+- Tests must use **mocks for external dependencies** (no real API/AD/network/file system calls)
+- Test files use Pester v5 syntax (`BeforeAll`, `AfterAll`, `Describe`, `Context`, `It`)
+- Maintain **85% code coverage threshold** - all code paths must be tested
+- Mock external dependencies with `Mock -CommandName ... -ModuleName GPOps`
+- Test both named parameters and pipeline input
+- Test `ShouldProcess` (`-WhatIf`) support where applicable
+
+### Functional Mocking Patterns
+
+#### Mocking External Commands
+```powershell
+BeforeAll {
+    Import-Module GPOps -Force
+    Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
+        return @{
+            DisplayName = 'Test GPO'
+            Id          = [guid]::NewGuid()
+        }
+    }
+}
+
+It "retrieves GPO data without actual AD calls" {
+    $result = Get-GpoInfo -Name 'Test GPO'
+    Assert-MockCalled -CommandName Get-GPO -Times 1 -Scope It
+}
+```
+
+#### Mocking with Different Return Values per Call
+```powershell
+Mock -CommandName Test-ComputerConnectivity -ModuleName GPOps -MockWith {
+    param($ComputerName)
+    if ($ComputerName -eq 'OnlineServer') {
+        return $true
+    }
+    return $false
+}
+```
+
+#### Mocking Failures and Error Handling
+```powershell
+Mock -CommandName Get-ADObject -ModuleName GPOps -MockWith {
+    throw [System.UnauthorizedAccessException]"Access Denied"
+}
+
+It "handles access denied errors gracefully" {
+    { Get-GpoDetails -Name 'SecureGPO' } | Should -Throw -ExceptionType ([System.UnauthorizedAccessException])
+}
+```
+
+#### Verifying Mock Calls
+```powershell
+It "processes all items in parallel" {
+    $items = @('Item1', 'Item2', 'Item3')
+    Invoke-BatchOperation -Items $items
+
+    # Verify the command was called for each item
+    Assert-MockCalled -CommandName Process-Item -Times 3 -Scope It
+    Assert-MockCalled -CommandName Process-Item -ParameterFilter { $Name -eq 'Item1' } -Times 1
+}
+```
+
+### Test File Organization
+
+Test files mirror the source structure:
+- `tests/Unit/Public/` - Tests for public functions
+- `tests/Unit/Private/` - Tests for private functions
+- `tests/Unit/Classes/` - Tests for classes
+- `tests/QA/` - Quality assurance tests (module-level validation)
+
+Example test structure:
+```powershell
+BeforeAll {
+    Import-Module $PSScriptRoot/../../output/module/GPOps -Force -ErrorAction Stop
+}
+
+AfterAll {
+    Remove-Module GPOps -Force -ErrorAction SilentlyContinue
+}
+
+Describe 'Get-GpoInfo' {
+    Context 'When GPO exists' {
+        BeforeEach {
+            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
+                return [PSCustomObject]@{
+                    DisplayName = 'Test GPO'
+                    Id          = '12345678-1234-1234-1234-123456789012'
+                }
+            }
+        }
+
+        It 'returns GPO information' {
+            $result = Get-GpoInfo -Name 'Test GPO'
+            $result.DisplayName | Should -Be 'Test GPO'
+        }
+
+        It 'calls Get-GPO once' {
+            Get-GpoInfo -Name 'Test GPO'
+            Assert-MockCalled -CommandName Get-GPO -Times 1 -Scope It
+        }
+    }
+
+    Context 'When GPO does not exist' {
+        BeforeEach {
+            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith { return $null }
+        }
+
+        It 'returns null' {
+            $result = Get-GpoInfo -Name 'NonExistent'
+            $result | Should -BeNullOrEmpty
+        }
+    }
+}
+```
+
 ## Dependencies
 
 Build dependencies (auto-resolved by build.ps1):
 - **Sampler**: Framework for the build pipeline
 - **ModuleBuilder**: Compiles module source into output
-- **Pester**: Testing framework
+- **Pester**: Testing framework (v5+)
 - **PSScriptAnalyzer**: Code analysis and linting
 - **InvokeBuild**: Task execution engine
 - **ChangelogManagement**: Changelog generation
