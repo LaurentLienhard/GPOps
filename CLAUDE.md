@@ -258,7 +258,12 @@ class GPO
 
     GPO([string]$Name)
     {
-        $this.DisplayName = $Name
+        if (-not [string]::IsNullOrEmpty($Name)) {
+            $this.DisplayName = $Name
+        }
+        else {
+            $this.DisplayName = ''
+        }
         $this.Id = [guid]::NewGuid()
         $this.LinkedOUs = [System.Collections.Generic.List[string]]::new()
     }
@@ -287,89 +292,15 @@ class GPO
 - Testable: Create test instances without mocking external dependencies
 - Discoverable: IDE autocomplete shows all available methods on an object
 
-### PowerShell 7+ Optimization
+### PowerShell Compatibility and Standards
 
-This project **targets PowerShell 7+ exclusively** and must leverage all modern language features for performance and readability.
+This project follows standard PowerShell practices compatible with PowerShell 5.1 and higher. All code should prioritize:
+- **Explicit over implicit**: Use clear null checks and conditional statements
+- **Compatibility**: Avoid PowerShell 7+ specific syntax features
+- **Readability**: Favor clarity over brevity
+- **Performance**: Use efficient data structures (`List[T]`, generic collections) and pipeline operations
 
-#### Modern Operators and Syntax
-
-**Null-Coalescing Operator (`??`)**
-```powershell
-# ❌ OLD: PowerShell 5.1 style
-$result = if ($value -eq $null) { $default } else { $value }
-
-# ✅ NEW: PowerShell 7+ style
-$result = $value ?? $default
-```
-
-**Null-Conditional Operators (`?.`)**
-```powershell
-# ❌ OLD: Multiple null checks
-if ($gpo -ne $null -and $gpo.Properties -ne $null) {
-    $props = $gpo.Properties
-}
-
-# ✅ NEW: Cleaner syntax
-$props = $gpo?.Properties
-```
-
-**Ternary Operator (`? :`)**
-```powershell
-# ❌ OLD: Verbose if/else
-if ($value -gt 100) {
-    $status = "High"
-} else {
-    $status = "Low"
-}
-
-# ✅ NEW: Concise and readable
-$status = $value -gt 100 ? "High" : "Low"
-```
-
-#### Parallel Processing (Required for 10+ items)
-
-**ForEach-Object -Parallel**
-```powershell
-# ✅ REQUIRED: Use parallel processing for batch operations
-$gpos | ForEach-Object -ThrottleLimit 32 -Parallel {
-    $gpo = $_
-
-    # Use $using: to access outer scope variables
-    $domain = $using:Domain
-
-    try {
-        # Process GPO in parallel
-        [PSCustomObject]@{
-            Name   = $gpo.DisplayName
-            Status = 'Processed'
-        }
-    }
-    catch {
-        # Errors in parallel blocks must be handled
-        Write-Error "Failed to process $($gpo.DisplayName): $_"
-    }
-} | Where-Object { $null -ne $_ }
-```
-
-**Fallback for PowerShell 5.1 (when necessary)**
-```powershell
-# Check version and use appropriate approach
-if ($PSVersionTable.PSVersion.Major -ge 7) {
-    # Use modern parallel processing
-    $results = $items | ForEach-Object -ThrottleLimit 32 -Parallel {
-        # Parallel implementation
-    }
-}
-else {
-    # Fallback for older PowerShell
-    Write-Warning "Running on PowerShell 5.1 - parallel processing not available"
-    $results = $items | ForEach-Object {
-        # Sequential implementation
-    }
-}
-```
-
-#### Performance Best Practices
+### Performance and Best Practices
 
 **Use Generic Lists Instead of ArrayList**
 ```powershell
@@ -470,18 +401,18 @@ $homeDir = $env:HOME     # Cross-platform
 $pathSep = [IO.Path]::PathSeparator
 ```
 
-#### Recommended Version Minimum
+#### PowerShell Compatibility
 
-- **Minimum**: PowerShell 7.0
-- **Recommended**: PowerShell 7.2+
-- **Optional**: PowerShell 7.4+ for latest features
+- **Minimum**: PowerShell 5.1 (Windows PowerShell) or PowerShell 7.0 (Core)
+- **Recommended**: PowerShell 7.2+ for best compatibility and performance
+- **Focus**: Write code compatible with PowerShell 5.1+ to maximize compatibility
 
-Add version check at module load:
-```powershell
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    throw "This module requires PowerShell 7.0 or higher. Current version: $($PSVersionTable.PSVersion)"
-}
-```
+**Compatibility Rules:**
+- Use explicit null checks (`-eq $null`, `-ne $null`) instead of operators like `??` or `?.`
+- Use `if/else` statements for conditional assignment instead of ternary operators
+- Avoid `ForEach-Object -Parallel` (PowerShell 7+ only) for core functionality
+- Use `[System.Collections.Generic.List[T]]` for better performance than array concatenation
+- Use splatting and explicit parameters over modern operator shortcuts
 
 ## Development Workflow
 
