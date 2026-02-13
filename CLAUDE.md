@@ -232,6 +232,202 @@ class GPO
 - Testable: Create test instances without mocking external dependencies
 - Discoverable: IDE autocomplete shows all available methods on an object
 
+### PowerShell 7+ Optimization
+
+This project **targets PowerShell 7+ exclusively** and must leverage all modern language features for performance and readability.
+
+#### Modern Operators and Syntax
+
+**Null-Coalescing Operator (`??`)**
+```powershell
+# ❌ OLD: PowerShell 5.1 style
+$result = if ($value -eq $null) { $default } else { $value }
+
+# ✅ NEW: PowerShell 7+ style
+$result = $value ?? $default
+```
+
+**Null-Conditional Operators (`?.`)**
+```powershell
+# ❌ OLD: Multiple null checks
+if ($gpo -ne $null -and $gpo.Properties -ne $null) {
+    $props = $gpo.Properties
+}
+
+# ✅ NEW: Cleaner syntax
+$props = $gpo?.Properties
+```
+
+**Ternary Operator (`? :`)**
+```powershell
+# ❌ OLD: Verbose if/else
+if ($value -gt 100) {
+    $status = "High"
+} else {
+    $status = "Low"
+}
+
+# ✅ NEW: Concise and readable
+$status = $value -gt 100 ? "High" : "Low"
+```
+
+#### Parallel Processing (Required for 10+ items)
+
+**ForEach-Object -Parallel**
+```powershell
+# ✅ REQUIRED: Use parallel processing for batch operations
+$gpos | ForEach-Object -ThrottleLimit 32 -Parallel {
+    $gpo = $_
+
+    # Use $using: to access outer scope variables
+    $domain = $using:Domain
+
+    try {
+        # Process GPO in parallel
+        [PSCustomObject]@{
+            Name   = $gpo.DisplayName
+            Status = 'Processed'
+        }
+    }
+    catch {
+        # Errors in parallel blocks must be handled
+        Write-Error "Failed to process $($gpo.DisplayName): $_"
+    }
+} | Where-Object { $null -ne $_ }
+```
+
+**Fallback for PowerShell 5.1 (when necessary)**
+```powershell
+# Check version and use appropriate approach
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+    # Use modern parallel processing
+    $results = $items | ForEach-Object -ThrottleLimit 32 -Parallel {
+        # Parallel implementation
+    }
+}
+else {
+    # Fallback for older PowerShell
+    Write-Warning "Running on PowerShell 5.1 - parallel processing not available"
+    $results = $items | ForEach-Object {
+        # Sequential implementation
+    }
+}
+```
+
+#### Performance Best Practices
+
+**Use Generic Lists Instead of ArrayList**
+```powershell
+# ✅ PREFERRED: 100x faster than +=
+$results = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+$items | ForEach-Object {
+    $results.Add([PSCustomObject]@{
+        Name  = $_
+        Value = Get-Value $_
+    })
+}
+
+return $results
+```
+
+**Pipeline Optimization**
+```powershell
+# ✅ Use pipeline for filtering/transformation
+$filtered = $gpos |
+    Where-Object { $_.Name -like "PROD-*" } |
+    Select-Object DisplayName, Id, Owner |
+    Sort-Object DisplayName
+
+# ✅ Use early LDAP filtering instead of post-processing
+$results = Get-ADObject -LDAPFilter "(|(cn=GPO-*)(cn=PROD-*))" |
+    Where-Object { $_.ObjectClass -eq "groupPolicyContainer" }
+```
+
+**Avoid Sequential Loops**
+```powershell
+# ❌ AVOID: Sequential loop for multiple items
+foreach ($computer in $computers) {
+    Get-GPOStatus -Computer $computer
+}
+
+# ✅ PREFER: Parallel processing
+$computers | ForEach-Object -ThrottleLimit 32 -Parallel {
+    Get-GPOStatus -Computer $_
+}
+```
+
+#### Language Features to Leverage
+
+**Strongly Typed Collections**
+```powershell
+# ✅ Use typed collections for better performance
+class GPOBatch
+{
+    [System.Collections.Generic.List[GPO]]$Items
+    [System.Collections.Generic.Dictionary[string, GPO]]$Index
+
+    GPOBatch()
+    {
+        $this.Items = [System.Collections.Generic.List[GPO]]::new()
+        $this.Index = [System.Collections.Generic.Dictionary[string, GPO]]::new()
+    }
+}
+```
+
+**Splatting with Modern Syntax**
+```powershell
+# ✅ Use splatting for clean, maintainable code
+$params = @{
+    Filter      = "Name -like 'PROD-*'"
+    Properties  = 'DisplayName', 'Owner', 'Created'
+    ErrorAction = 'Stop'
+}
+
+$gpos = Get-ADObject @params
+```
+
+**Switch Statement (Modern Pattern Matching)**
+```powershell
+# ✅ Modern switch with conditions
+$action = switch ($gpo.Status) {
+    'Active'   { 'monitor' }
+    'Disabled' { 'audit' }
+    'Draft'    { 'review' }
+    default    { 'unknown' }
+}
+```
+
+#### Cross-Platform Considerations
+
+**Path Handling**
+```powershell
+# ✅ Use Path module for cross-platform compatibility
+$configPath = Join-Path $PSScriptRoot "configs" "policy.json"
+$logPath = Join-Path $env:TEMP "gpo.log"
+```
+
+**Environment Variables**
+```powershell
+# ✅ Use standard cross-platform variables
+$tmpDir = $env:TEMP      # Works on Windows, macOS, Linux
+$homeDir = $env:HOME     # Cross-platform
+$pathSep = [IO.Path]::PathSeparator
+```
+
+#### Recommended Version Minimum
+
+- **Minimum**: PowerShell 7.0
+- **Recommended**: PowerShell 7.2+
+- **Optional**: PowerShell 7.4+ for latest features
+
+Add version check at module load:
+```powershell
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    throw "This module requires PowerShell 7.0 or higher. Current version: $($PSVersionTable.PSVersion)"
+}
+```
+
 ## Development Workflow
 
 1. **Add new functions**: Create `.ps1` files in `source/Public/` or `source/Private/`
