@@ -1,12 +1,12 @@
 BeforeAll {
-    $modulePath = Join-Path $PSScriptRoot '../../output/module/GPOps' -Resolve -ErrorAction SilentlyContinue
+    $modulePath = Join-Path $PSScriptRoot '../../../output/module/GPOps' -Resolve -ErrorAction SilentlyContinue
     if (-not $modulePath -or -not (Test-Path $modulePath)) {
         # If module not built yet, load from source
-        $classPath = Join-Path $PSScriptRoot '../../source/Classes/01_GPO.ps1'
-        . $classPath
+        $classPath = Join-Path $PSScriptRoot '../../../source/Classes/01_GPO.ps1' | Resolve-Path
+        & $classPath
 
-        $functionPath = Join-Path $PSScriptRoot '../../source/Public/Get-GPOpsInfo.ps1'
-        . $functionPath
+        $functionPath = Join-Path $PSScriptRoot '../../../source/Public/Get-GPOpsInfo.ps1' | Resolve-Path
+        & $functionPath
     }
     else {
         Import-Module $modulePath -Force -ErrorAction Stop
@@ -19,9 +19,9 @@ AfterAll {
 
 Describe 'Get-GPOpsInfo' {
     Context 'When GPO exists' {
-        BeforeEach {
-            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
-                param([string]$Name)
+            BeforeEach {
+                Mock -CommandName Get-GPO -MockWith {
+                    param([string]$Name)
 
                 return [PSCustomObject]@{
                     DisplayName = 'Test GPO'
@@ -97,7 +97,7 @@ Describe 'Get-GPOpsInfo' {
 
     Context 'When multiple GPOs exist' {
         BeforeEach {
-            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
+            Mock -CommandName Get-GPO -MockWith {
                 @(
                     [PSCustomObject]@{
                         DisplayName = 'GPO-1'
@@ -138,7 +138,7 @@ Describe 'Get-GPOpsInfo' {
 
     Context 'When GPO does not exist' {
         BeforeEach {
-            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
+            Mock -CommandName Get-GPO -MockWith {
                 return $null
             }
         }
@@ -156,7 +156,7 @@ Describe 'Get-GPOpsInfo' {
 
     Context 'When Get-GPO throws ADIdentityNotFoundException' {
         BeforeEach {
-            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
+            Mock -CommandName Get-GPO -MockWith {
                 throw [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException]"GPO not found"
             }
         }
@@ -175,7 +175,7 @@ Describe 'Get-GPOpsInfo' {
 
     Context 'When Get-GPO throws generic exception' {
         BeforeEach {
-            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
+            Mock -CommandName Get-GPO -MockWith {
                 throw [System.Exception]"Generic error"
             }
         }
@@ -189,7 +189,7 @@ Describe 'Get-GPOpsInfo' {
 
     Context 'Pipeline input' {
         BeforeEach {
-            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
+            Mock -CommandName Get-GPO -MockWith {
                 param([string]$Name)
 
                 return [PSCustomObject]@{
@@ -223,7 +223,7 @@ Describe 'Get-GPOpsInfo' {
 
     Context 'Disabled GPO' {
         BeforeEach {
-            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
+            Mock -CommandName Get-GPO -MockWith {
                 return [PSCustomObject]@{
                     DisplayName = 'Disabled GPO'
                     Id          = [guid]::NewGuid()
@@ -242,7 +242,7 @@ Describe 'Get-GPOpsInfo' {
 
     Context 'Verbose output' {
         BeforeEach {
-            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
+            Mock -CommandName Get-GPO -MockWith {
                 return [PSCustomObject]@{
                     DisplayName = 'Test GPO'
                     Id          = [guid]::NewGuid()
@@ -260,7 +260,7 @@ Describe 'Get-GPOpsInfo' {
 
     Context 'Error handling for GPO object creation' {
         BeforeEach {
-            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
+            Mock -CommandName Get-GPO -MockWith {
                 return @(
                     [PSCustomObject]@{
                         DisplayName = 'Valid GPO'
@@ -294,6 +294,77 @@ Describe 'Get-GPOpsInfo' {
 
         It 'rejects empty Name' {
             { Get-GPOpsInfo -Name '' } | Should -Throw
+        }
+    }
+
+    Context 'Remote execution - configuration' {
+        It 'accepts ComputerName parameter' {
+            { Get-GPOpsInfo -Name 'Test' -ComputerName 'DC01' -ErrorAction SilentlyContinue } |
+                Should -Not -Throw
+        }
+
+        It 'accepts Credential parameter' {
+            $cred = New-Object System.Management.Automation.PSCredential(
+                'user',
+                (ConvertTo-SecureString 'pass' -AsPlainText -Force)
+            )
+
+            { Get-GPOpsInfo -Name 'Test' -ComputerName 'DC01' -Credential $cred -ErrorAction SilentlyContinue } |
+                Should -Not -Throw
+        }
+
+        It 'shows help for ComputerName parameter' {
+            (Get-Help Get-GPOpsInfo).Parameters.Parameter |
+                Where-Object { $_.Name -eq 'ComputerName' } |
+                Should -Not -BeNullOrEmpty
+        }
+
+        It 'shows help for Credential parameter' {
+            (Get-Help Get-GPOpsInfo).Parameters.Parameter |
+                Where-Object { $_.Name -eq 'Credential' } |
+                Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Local execution behavior' {
+        BeforeEach {
+            Mock -CommandName Get-GPO -MockWith {
+                return @{
+                    DisplayName = 'Local GPO'
+                    Id          = [guid]::NewGuid()
+                    Domain      = 'contoso.com'
+                    GpoStatus   = 'AllSettingsEnabled'
+                }
+            }
+        }
+
+        It 'executes locally when ComputerName not specified' {
+            $result = Get-GPOpsInfo -Name 'Test'
+
+            $result | Should -Not -BeNullOrEmpty
+            Assert-MockCalled -CommandName Get-GPO -Times 1 -Scope It
+        }
+
+        It 'returns GPO objects for local execution' {
+            $result = Get-GPOpsInfo -Name 'Test'
+
+            $result | Should -BeOfType GPO
+            $result.DisplayName | Should -Be 'Local GPO'
+        }
+    }
+
+    Context 'Remote parameter support' {
+        It 'does not call Get-GPO when ComputerName is specified' {
+            Mock -CommandName Get-GPO
+
+            Get-GPOpsInfo -Name 'Test' -ComputerName 'DC01' -ErrorAction SilentlyContinue
+
+            Assert-MockCalled -CommandName Get-GPO -Times 0 -Scope It
+        }
+
+        It 'throws appropriate error for remote execution without WinRM' {
+            { Get-GPOpsInfo -Name 'Test' -ComputerName 'DC01' -ErrorAction Stop } |
+                Should -Throw
         }
     }
 }
