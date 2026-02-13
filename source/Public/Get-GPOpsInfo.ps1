@@ -114,6 +114,18 @@ function Get-GPOpsInfo
         {
             Write-Verbose "Remote execution mode: $ComputerName"
 
+            # Initialize collection for names to process
+            $allNames = [System.Collections.Generic.List[string]]::new()
+
+            # If Name was provided directly (not from pipeline), add them now
+            if ($PSBoundParameters.ContainsKey('Name') -and $Name.Count -gt 0)
+            {
+                foreach ($gpoName in $Name)
+                {
+                    $allNames.Add($gpoName)
+                }
+            }
+
             # Define script block for remote execution
             $scriptBlock = {
                 param($Names, $Domain)
@@ -182,9 +194,6 @@ function Get-GPOpsInfo
 
                 return $remoteResults
             }
-
-            # Accumulate all names from pipeline for batch processing
-            $allNames = [System.Collections.Generic.List[string]]::new()
         }
     }
 
@@ -194,18 +203,16 @@ function Get-GPOpsInfo
         {
             Write-Verbose "Accumulating GPO names for remote batch execution"
 
-            # If Name is empty, use wildcard to get all
+            # Add names from pipeline (if any)
             if ($PSBoundParameters.ContainsKey('Name') -and $Name.Count -gt 0)
             {
                 foreach ($gpoName in $Name)
                 {
-                    $allNames.Add($gpoName)
+                    if (-not $allNames.Contains($gpoName))
+                    {
+                        $allNames.Add($gpoName)
+                    }
                 }
-            }
-            else
-            {
-                Write-Verbose "No GPO names specified - will retrieve all GPOs"
-                $allNames.Add('*')
             }
         }
         else
@@ -281,6 +288,13 @@ function Get-GPOpsInfo
         if ($isRemote)
         {
             Write-Verbose "Executing remote command on $ComputerName"
+
+            # If no names were specified, use wildcard to get all GPOs
+            if ($allNames.Count -eq 0)
+            {
+                Write-Verbose "No GPO names specified - will retrieve all GPOs"
+                $allNames.Add('*')
+            }
 
             # Build Invoke-Command parameters
             $invokeParams = @{
