@@ -156,6 +156,82 @@ function Get-Example
 - Prefix class files with numbers for load order (e.g., `01_GPO.ps1`, `02_LinkedGPO.ps1`)
 - Use `HIDDEN` keyword for internal properties (e.g., credentials)
 
+#### Object-Oriented Design Philosophy
+**Prefer classes over functions whenever possible.** Classes provide:
+- **Encapsulation**: Properties and methods bundled together with state
+- **Reusability**: Create instances with specific state rather than passing parameters everywhere
+- **Testability**: Easier to mock and test isolated objects
+- **Maintainability**: Self-documenting code with clear object relationships
+- **Type Safety**: Static typing prevents common errors
+
+**When to use classes:**
+- ✅ Any entity with multiple related properties (GPO, LinkedGPO, Group, etc.)
+- ✅ Objects that need to maintain state across method calls
+- ✅ When you have a collection of related functions working on the same data
+- ✅ Infrastructure objects with behavior (e.g., AD Query wrapper, Policy Filter)
+
+**When functions are acceptable:**
+- ✅ Simple utilities that transform input to output with no state
+- ✅ Formatters or validators
+- ✅ Wrapper functions for a single external command
+- ✅ Functions that orchestrate multiple classes
+
+**Example: Refactor from functions to classes**
+```powershell
+# ❌ AVOID: Multiple functions with scattered logic
+function Get-GpoTarget {
+    param([string]$GpoName)
+    # ...
+}
+
+function Add-GpoLink {
+    param([string]$GpoName, [string]$OuPath)
+    # ...
+}
+
+function Remove-GpoLink {
+    param([string]$GpoName, [string]$OuPath)
+    # ...
+}
+
+# ✅ PREFER: Class with encapsulated state and behavior
+class GPO
+{
+    [System.String]$DisplayName
+    [System.Guid]$Id
+    [System.Collections.Generic.List[string]]$LinkedOUs
+
+    GPO([string]$Name)
+    {
+        $this.DisplayName = $Name
+        $this.Id = [guid]::NewGuid()
+        $this.LinkedOUs = [System.Collections.Generic.List[string]]::new()
+    }
+
+    [void] LinkToOu([string]$OuPath)
+    {
+        $this.LinkedOUs.Add($OuPath)
+    }
+
+    [void] UnlinkFromOu([string]$OuPath)
+    {
+        $this.LinkedOUs.Remove($OuPath)
+    }
+
+    [object] GetTargets()
+    {
+        return $this.LinkedOUs
+    }
+}
+```
+
+**Benefits of this approach:**
+- State is managed within the object (no scattered parameters)
+- Methods naturally operate on the object's data
+- Easier to extend with new methods (e.g., `Backup()`, `Restore()`, `Report()`)
+- Testable: Create test instances without mocking external dependencies
+- Discoverable: IDE autocomplete shows all available methods on an object
+
 ## Development Workflow
 
 1. **Add new functions**: Create `.ps1` files in `source/Public/` or `source/Private/`
