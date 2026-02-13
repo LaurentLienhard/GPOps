@@ -132,21 +132,15 @@ function Get-GPOpsInfo
 
                 $remoteResults = [System.Collections.Generic.List[hashtable]]::new()
 
-                # If Names is empty or null, use wildcard to get all
+                # If Names is empty or null, use -All to get all GPOs
                 if ($null -eq $Names -or $Names.Count -eq 0)
                 {
                     Write-Verbose "Remote: No names specified - retrieving all GPOs"
-                    $Names = @('*')
-                }
-
-                foreach ($gpoName in $Names)
-                {
-                    Write-Verbose "Remote: Processing GPO: $gpoName"
 
                     try
                     {
                         $params = @{
-                            Name        = $gpoName
+                            All         = $true
                             ErrorAction = 'Stop'
                         }
 
@@ -157,37 +151,140 @@ function Get-GPOpsInfo
                         }
 
                         $adGpos = Get-GPO @params
+                        $gpoCollection = @($adGpos)
 
-                        if ($null -ne $adGpos)
+                        foreach ($adGpo in $gpoCollection)
                         {
-                            $gpoCollection = @($adGpos)
-
-                            foreach ($adGpo in $gpoCollection)
-                            {
-                                # Serialize to hashtable for remote transport
-                                $remoteResults.Add(@{
-                                    DisplayName = $adGpo.DisplayName
-                                    Id          = $adGpo.Id
-                                    Domain      = $adGpo.Domain
-                                    Created     = $adGpo.Created
-                                    Modified    = $adGpo.Modified
-                                    Owner       = $adGpo.Owner
-                                    Description = $adGpo.Description
-                                    GpoStatus   = $adGpo.GpoStatus
-                                })
-                            }
+                            # Serialize to hashtable for remote transport
+                            $remoteResults.Add(@{
+                                DisplayName = $adGpo.DisplayName
+                                Id          = $adGpo.Id
+                                Domain      = $adGpo.Domain
+                                Created     = $adGpo.Created
+                                Modified    = $adGpo.Modified
+                                Owner       = $adGpo.Owner
+                                Description = $adGpo.Description
+                                GpoStatus   = $adGpo.GpoStatus
+                            })
                         }
                     }
                     catch
                     {
-                        # Check exception type by name since type may not be available in remote session
-                        if ($_.Exception.GetType().Name -like '*ADIdentityNotFoundException')
+                        Write-Error "Remote: Failed to retrieve all GPOs: $_"
+                    }
+                }
+                else
+                {
+                    # Check if any name contains wildcards
+                    $hasWildcards = $Names | Where-Object { $_ -match '[\*\?]' }
+
+                    if ($hasWildcards)
+                    {
+                        # If wildcards are present, retrieve all GPOs and filter
+                        Write-Verbose "Remote: Wildcard pattern detected - retrieving all GPOs and filtering"
+
+                        try
                         {
-                            Write-Error "Remote: GPO not found: $gpoName"
+                            $params = @{
+                                All         = $true
+                                ErrorAction = 'Stop'
+                            }
+
+                            if ($Domain)
+                            {
+                                $params['Domain'] = $Domain
+                                Write-Verbose "Remote: Querying domain: $Domain"
+                            }
+
+                            $allGpos = Get-GPO @params
+
+                            if ($null -ne $allGpos)
+                            {
+                                $gpoCollection = @($allGpos)
+
+                                foreach ($gpoName in $Names)
+                                {
+                                    Write-Verbose "Remote: Filtering GPOs for pattern: $gpoName"
+
+                                    foreach ($adGpo in $gpoCollection)
+                                    {
+                                        if ($adGpo.DisplayName -like $gpoName)
+                                        {
+                                            # Serialize to hashtable for remote transport
+                                            $remoteResults.Add(@{
+                                                DisplayName = $adGpo.DisplayName
+                                                Id          = $adGpo.Id
+                                                Domain      = $adGpo.Domain
+                                                Created     = $adGpo.Created
+                                                Modified    = $adGpo.Modified
+                                                Owner       = $adGpo.Owner
+                                                Description = $adGpo.Description
+                                                GpoStatus   = $adGpo.GpoStatus
+                                            })
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        else
+                        catch
                         {
-                            Write-Error "Remote: Failed to retrieve GPO '$gpoName': $_"
+                            Write-Error "Remote: Failed to retrieve GPOs with wildcard filter: $_"
+                        }
+                    }
+                    else
+                    {
+                        # No wildcards - use exact name matching
+                        foreach ($gpoName in $Names)
+                        {
+                            Write-Verbose "Remote: Processing GPO: $gpoName"
+
+                            try
+                            {
+                                $params = @{
+                                    Name        = $gpoName
+                                    ErrorAction = 'Stop'
+                                }
+
+                                if ($Domain)
+                                {
+                                    $params['Domain'] = $Domain
+                                    Write-Verbose "Remote: Querying domain: $Domain"
+                                }
+
+                                $adGpos = Get-GPO @params
+
+                                if ($null -ne $adGpos)
+                                {
+                                    $gpoCollection = @($adGpos)
+
+                                    foreach ($adGpo in $gpoCollection)
+                                    {
+                                        # Serialize to hashtable for remote transport
+                                        $remoteResults.Add(@{
+                                            DisplayName = $adGpo.DisplayName
+                                            Id          = $adGpo.Id
+                                            Domain      = $adGpo.Domain
+                                            Created     = $adGpo.Created
+                                            Modified    = $adGpo.Modified
+                                            Owner       = $adGpo.Owner
+                                            Description = $adGpo.Description
+                                            GpoStatus   = $adGpo.GpoStatus
+                                        })
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                # Check exception type by name since type may not be available in remote session
+                                if ($_.Exception.GetType().Name -like '*ADIdentityNotFoundException')
+                                {
+                                    Write-Error "Remote: GPO not found: $gpoName"
+                                }
+                                else
+                                {
+                                    Write-Error "Remote: Failed to retrieve GPO '$gpoName': $_"
+                                }
+                            }
                         }
                     }
                 }
@@ -218,25 +315,129 @@ function Get-GPOpsInfo
         else
         {
             # Local execution path (existing logic)
-            # If Name is empty, use wildcard to get all
-            $gposToProcess = if ($PSBoundParameters.ContainsKey('Name') -and $Name.Count -gt 0)
+            # If Name is empty, use -All to get all GPOs
+            if ($PSBoundParameters.ContainsKey('Name') -and $Name.Count -gt 0)
             {
-                $Name
+                # Check if any name contains wildcards
+                $hasWildcards = $Name | Where-Object { $_ -match '[\*\?]' }
+
+                if ($hasWildcards)
+                {
+                    # If wildcards are present, retrieve all GPOs and filter
+                    Write-Verbose "Wildcard pattern detected - retrieving all GPOs and filtering"
+
+                    try
+                    {
+                        $params = @{
+                            All         = $true
+                            ErrorAction = 'Stop'
+                        }
+
+                        if ($PSBoundParameters.ContainsKey('Domain'))
+                        {
+                            $params['Domain'] = $Domain
+                            Write-Verbose "Querying domain: $Domain"
+                        }
+
+                        $allGpos = Get-GPO @params
+
+                        if ($null -ne $allGpos)
+                        {
+                            $gpoCollection = @($allGpos)
+
+                            foreach ($gpoName in $Name)
+                            {
+                                Write-Verbose "Filtering GPOs for pattern: $gpoName"
+
+                                foreach ($adGpo in $gpoCollection)
+                                {
+                                    if ($adGpo.DisplayName -like $gpoName)
+                                    {
+                                        try
+                                        {
+                                            $gpo = [GPO]::new($adGpo)
+                                            $results.Add($gpo)
+                                            Write-Verbose "Added GPO: $($gpo.DisplayName) [$($gpo.Id)]"
+                                        }
+                                        catch
+                                        {
+                                            Write-Error "Failed to create GPO object for '$($adGpo.DisplayName)': $_"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        Write-Error "Failed to retrieve GPOs with wildcard filter: $_"
+                    }
+                }
+                else
+                {
+                    # No wildcards - use exact name matching
+                    foreach ($gpoName in $Name)
+                    {
+                        Write-Verbose "Processing GPO: $gpoName"
+
+                        try
+                        {
+                            $params = @{
+                                Name        = $gpoName
+                                ErrorAction = 'Stop'
+                            }
+
+                            if ($PSBoundParameters.ContainsKey('Domain'))
+                            {
+                                $params['Domain'] = $Domain
+                                Write-Verbose "Querying domain: $Domain"
+                            }
+
+                            $adGpos = Get-GPO @params
+
+                            if ($null -eq $adGpos)
+                            {
+                                Write-Verbose "No GPO found matching: $gpoName"
+                                continue
+                            }
+
+                            # Handle both single object and array results
+                            $gpoCollection = @($adGpos)
+
+                            foreach ($adGpo in $gpoCollection)
+                            {
+                                try
+                                {
+                                    $gpo = [GPO]::new($adGpo)
+                                    $results.Add($gpo)
+                                    Write-Verbose "Added GPO: $($gpo.DisplayName) [$($gpo.Id)]"
+                                }
+                                catch
+                                {
+                                    Write-Error "Failed to create GPO object for '$($adGpo.DisplayName)': $_"
+                                }
+                            }
+                        }
+                        catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException]
+                        {
+                            Write-Error "GPO not found: $gpoName"
+                        }
+                        catch
+                        {
+                            Write-Error "Failed to retrieve GPO '$gpoName': $_"
+                        }
+                    }
+                }
             }
             else
             {
+                # Retrieve all GPOs
                 Write-Verbose "No GPO names specified - will retrieve all GPOs"
-                @('*')
-            }
-
-            foreach ($gpoName in $gposToProcess)
-            {
-                Write-Verbose "Processing GPO: $gpoName"
 
                 try
                 {
                     $params = @{
-                        Name        = $gpoName
+                        All         = $true
                         ErrorAction = 'Stop'
                     }
 
@@ -248,36 +449,28 @@ function Get-GPOpsInfo
 
                     $adGpos = Get-GPO @params
 
-                    if ($null -eq $adGpos)
+                    if ($null -ne $adGpos)
                     {
-                        Write-Verbose "No GPO found matching: $gpoName"
-                        continue
-                    }
+                        $gpoCollection = @($adGpos)
 
-                    # Handle both single object and array results
-                    $gpoCollection = @($adGpos)
-
-                    foreach ($adGpo in $gpoCollection)
-                    {
-                        try
+                        foreach ($adGpo in $gpoCollection)
                         {
-                            $gpo = [GPO]::new($adGpo)
-                            $results.Add($gpo)
-                            Write-Verbose "Added GPO: $($gpo.DisplayName) [$($gpo.Id)]"
-                        }
-                        catch
-                        {
-                            Write-Error "Failed to create GPO object for '$($adGpo.DisplayName)': $_"
+                            try
+                            {
+                                $gpo = [GPO]::new($adGpo)
+                                $results.Add($gpo)
+                                Write-Verbose "Added GPO: $($gpo.DisplayName) [$($gpo.Id)]"
+                            }
+                            catch
+                            {
+                                Write-Error "Failed to create GPO object for '$($adGpo.DisplayName)': $_"
+                            }
                         }
                     }
-                }
-                catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException]
-                {
-                    Write-Error "GPO not found: $gpoName"
                 }
                 catch
                 {
-                    Write-Error "Failed to retrieve GPO '$gpoName': $_"
+                    Write-Error "Failed to retrieve all GPOs: $_"
                 }
             }
         }
@@ -289,14 +482,8 @@ function Get-GPOpsInfo
         {
             Write-Verbose "Executing remote command on $ComputerName"
 
-            # If no names were specified, use wildcard to get all GPOs
-            if ($allNames.Count -eq 0)
-            {
-                Write-Verbose "No GPO names specified - will retrieve all GPOs"
-                $allNames.Add('*')
-            }
-
             # Build Invoke-Command parameters
+            # If allNames is empty, the script block will use Get-GPO -All
             $invokeParams = @{
                 ComputerName = $ComputerName
                 ScriptBlock  = $scriptBlock
