@@ -1,12 +1,9 @@
 PS C:\Users\llienhard\Documents\01-DEV\Github\GPOps> Get-GPOpsInfo  -Domain fmlogistic.fr -ComputerName caw1pdc03 -Credential (Get-Secret AdmAccount) -Verbose
-Vault MyVault requires a password.
-Enter password:
-********
 VERBOSE: Starting Get-GPOpsInfo
 VERBOSE: Remote execution mode: caw1pdc03
 VERBOSE: Accumulating GPO names for remote batch execution
-VERBOSE: No GPO names specified - will retrieve all GPOs
 VERBOSE: Executing remote command on caw1pdc03
+VERBOSE: No GPO names specified - will retrieve all GPOs
 VERBOSE: Using explicit credentials for remote execution
 Get-GPOpsInfo: Remote execution failed: Remote: Failed to retrieve GPO '*': Cannot convert '*' to the type 'System.String' required by parameter 'Name'. Specified method is not supported.
 Write-Error: Remote: Failed to retrieve GPO '*': Cannot convert '*' to the type 'System.String' required by parameter 'Name'. Specified method is not supported.
