@@ -13,6 +13,7 @@ function Get-GPOpsInfo
         .PARAMETER Name
             The name or wildcard pattern of the GPO to retrieve.
             Supports PowerShell wildcards (e.g., "PROD-*", "*-Security").
+            If not specified, retrieves all GPOs in the domain.
 
         .PARAMETER Domain
             The Active Directory domain to query.
@@ -54,6 +55,16 @@ function Get-GPOpsInfo
 
             Retrieves GPOs from remote computer using explicit credentials.
 
+        .EXAMPLE
+            Get-GPOpsInfo
+
+            Retrieves all GPOs in the current domain locally.
+
+        .EXAMPLE
+            Get-GPOpsInfo -Domain "contoso.com"
+
+            Retrieves all GPOs from contoso.com domain.
+
         .OUTPUTS
             GPO
             Instances of the GPO class with properties and linked OUs.
@@ -67,12 +78,10 @@ function Get-GPOpsInfo
     [OutputType([GPO])]
     param(
         [Parameter(
-            Mandatory = $true,
             ValueFromPipeline = $true,
             ValueFromPipelineByPropertyName = $true,
-            HelpMessage = 'Name or wildcard pattern of the GPO to retrieve'
+            HelpMessage = 'Name or wildcard pattern of the GPO to retrieve. If not specified, retrieves all GPOs'
         )]
-        [ValidateNotNullOrEmpty()]
         [string[]]$Name,
 
         [Parameter(
@@ -110,6 +119,13 @@ function Get-GPOpsInfo
                 param($Names, $Domain)
 
                 $remoteResults = [System.Collections.Generic.List[hashtable]]::new()
+
+                # If Names is empty or null, use wildcard to get all
+                if ($null -eq $Names -or $Names.Count -eq 0)
+                {
+                    Write-Verbose "Remote: No names specified - retrieving all GPOs"
+                    $Names = @('*')
+                }
 
                 foreach ($gpoName in $Names)
                 {
@@ -178,15 +194,35 @@ function Get-GPOpsInfo
         {
             Write-Verbose "Accumulating GPO names for remote batch execution"
 
-            foreach ($gpoName in $Name)
+            # If Name is empty, use wildcard to get all
+            if ($PSBoundParameters.ContainsKey('Name') -and $Name.Count -gt 0)
             {
-                $allNames.Add($gpoName)
+                foreach ($gpoName in $Name)
+                {
+                    $allNames.Add($gpoName)
+                }
+            }
+            else
+            {
+                Write-Verbose "No GPO names specified - will retrieve all GPOs"
+                $allNames.Add('*')
             }
         }
         else
         {
             # Local execution path (existing logic)
-            foreach ($gpoName in $Name)
+            # If Name is empty, use wildcard to get all
+            $gposToProcess = if ($PSBoundParameters.ContainsKey('Name') -and $Name.Count -gt 0)
+            {
+                $Name
+            }
+            else
+            {
+                Write-Verbose "No GPO names specified - will retrieve all GPOs"
+                @('*')
+            }
+
+            foreach ($gpoName in $gposToProcess)
             {
                 Write-Verbose "Processing GPO: $gpoName"
 
