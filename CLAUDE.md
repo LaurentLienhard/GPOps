@@ -1,0 +1,178 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+GPOps is a PowerShell module for full Group Policy Object (GPO) lifecycle management. It uses the **Sampler/ModuleBuilder** build system, which is the modern standard for building, testing, and publishing PowerShell modules.
+
+## Common Commands
+
+### Build and Test
+- **Full build with tests (default)**: `./build.ps1`
+- **Build only**: `./build.ps1 -Tasks build`
+- **Run all tests**: `./build.ps1 -Tasks test`
+- **Run specific test file**: `./build.ps1 -Tasks test -PesterScript tests/Unit/Public/Get-Something.tests.ps1`
+- **Code coverage check**: Automatically enforced during tests (threshold: 85% in build.yaml)
+
+### Linting and Analysis
+- **PSScriptAnalyzer** runs automatically during the build process as part of the ModuleBuilder workflow. It checks for code quality issues and PowerShell best practices.
+
+### Publishing
+- **Publish to GitHub and PowerShell Gallery**: `./build.ps1 -Tasks publish`
+
+## Architecture and Structure
+
+### Build System: Sampler/ModuleBuilder
+The project uses Invoke-Build tasks defined in `build.yaml`:
+- **`.` (default task)**: Runs `build` and `test` sequentially
+- **`build` task**: Cleans output, compiles module, generates changelog
+- **`test` task**: Runs Pester tests with code coverage validation
+- **`pack` task**: Packages the module as a NuGet package
+- **`publish` task**: Publishes to GitHub and PowerShell Gallery
+
+### Module Structure
+```
+source/
+  ├── Public/           # Exported functions (Get-Something.ps1, etc.)
+  ├── Private/          # Internal helper functions (Get-PrivateFunction.ps1, etc.)
+  └── en-US/            # Localization/help files
+
+output/                 # Build artifacts (generated, contains compiled .psm1)
+  └── module/
+    └── GPOps/
+      └── [version]/    # Versioned module directory
+
+tests/
+  ├── Unit/             # Unit tests for individual functions
+  │   ├── Public/       # Tests for public functions
+  │   └── Private/      # Tests for private functions
+  └── QA/               # Quality assurance tests (module-level validation)
+```
+
+### Build Process
+1. **ModuleBuilder** compiles `source/Public/*.ps1` and `source/Private/*.ps1` into a single `.psm1` file in `output/`
+2. **Semantic versioning** via GitVersion: Tags and commits define version numbers based on commit messages (see GitVersion.yml for patterns)
+3. **Code coverage**: Pester tests measure coverage; build fails if coverage drops below 85% threshold
+4. **Changelog**: Automatically generated from commit history
+
+### Key Files
+- **build.yaml**: Defines ModuleBuilder configuration and Invoke-Build workflows
+- **build.ps1**: Entry point that bootstraps dependencies and runs build tasks
+- **GitVersion.yml**: Semantic versioning rules (e.g., "breaking change" = major bump, "adds feature" = minor bump)
+- **RequiredModules.psd1**: Lists build-time dependencies (Sampler, Pester, ModuleBuilder, etc.)
+- **Resolve-Dependency.ps1**: Bootstraps required modules for the build environment
+
+### Function Patterns
+Public functions follow the PowerShell advanced function pattern:
+- Parameter validation with `[Parameter()]` attributes
+- Comment-based help (`.SYNOPSIS`, `.DESCRIPTION`, `.EXAMPLE`, `.PARAMETER`)
+- `SupportsShouldProcess = $true` and `-Confirm` support where appropriate
+- Verbose and Debug output support
+- Error handling with proper exit codes
+
+### Code Style
+
+#### General Rules
+- **All code, functions, and documentation must be written in English**
+- Comment-based help must be placed **immediately after the function name** (inside the function, before `[CmdletBinding()]`)
+- **Every function (Public and Private) and every class must have a corresponding Pester test file**
+- Tests must use mocks for external dependencies (no real API/AD/network calls)
+- Each function/class must achieve **minimum 85% code coverage**
+- **Prefer `Write-Verbose` over `Write-Host` or `Write-Output`** for informational messages
+
+#### Function Structure
+- Use **uppercase** for `BEGIN`, `PROCESS`, `END` blocks
+- Use `[CmdletBinding()]` for all functions
+- Use `[OutputType()]` attribute when returning specific types
+- Support pipeline input with `ValueFromPipeline` and `ValueFromPipelineByPropertyName`
+- Use `[Parameter()]` attribute with `Mandatory`, `HelpMessage`, `Position` as needed
+- Use validation attributes: `[ValidateSet()]`, `[ValidateNotNullOrEmpty()]`, `[ValidateRange()]`
+
+#### Parameter Patterns
+- Credential parameter pattern (optional credentials):
+  ```powershell
+  [Parameter()]
+  [System.Management.Automation.PSCredential]$Credential
+  ```
+- Check for credential with `$PSBoundParameters.ContainsKey('Credential')`
+
+#### Coding Conventions
+- Use **splatting** for commands with multiple parameters:
+  ```powershell
+  $params = @{
+      ComputerName = $Computer
+      ErrorAction  = 'Stop'
+  }
+  Invoke-Command @params
+  ```
+- Use `[PSCustomObject]@{}` for structured output objects
+- Use `[System.Collections.Generic.List[T]]::new()` instead of `ArrayList` for collections
+- Use `try/catch` blocks with specific exception types when possible
+- Use `[SuppressMessageAttribute()]` to bypass PSScriptAnalyzer rules only when justified
+
+#### Code Formatting (VSCode PowerShell Extension)
+**Brace Placement:**
+- Opening braces on new line: `OpenBraceOnSameLine = false`
+- New line after opening brace: `true`
+- New line after closing brace: `true`
+- Whitespace before opening brace: `true`
+
+**Spacing & Operators:**
+- Whitespace before opening parenthesis: `true`
+- Whitespace around operators: `true`
+- Whitespace after separator: `true`
+- Align property value pairs: `true`
+
+**Pipeline Formatting:**
+- Pipeline indentation style: `IncreaseIndentationAfterEveryPipeline`
+- Single-line blocks ignored: `false`
+
+**File Formatting:**
+- Trim trailing whitespace: `true`
+- Trim final newlines: `true`
+- Insert final newline: `true`
+- PSScriptAnalyzer enabled: `true`
+
+**Example formatted code:**
+```powershell
+function Get-Example
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $result = Get-Content -Path $Name |
+        Where-Object { $_ -match 'pattern' } |
+        Select-Object -Property Property1, Property2
+
+    return $result
+}
+```
+
+#### Class Structure
+- Use `#region` comments to organize sections: `#region <Properties>`, `#region <Constructor>`, `#region <Methods>`
+- Prefix class files with numbers for load order (e.g., `01_GPO.ps1`, `02_LinkedGPO.ps1`)
+- Use `HIDDEN` keyword for internal properties (e.g., credentials)
+
+## Development Workflow
+
+1. **Add new functions**: Create `.ps1` files in `source/Public/` or `source/Private/`
+2. **Add help content**: Include comment-based help in the function definition
+3. **Write tests**: Create corresponding `.tests.ps1` files in `tests/Unit/{Public|Private}/`
+4. **Run tests**: `./build.ps1 -Tasks test` validates tests pass and code coverage threshold is met
+5. **Full build**: `./build.ps1` performs build and test validation
+6. **Commit messages** control versioning via GitVersion regex patterns in GitVersion.yml
+
+## Dependencies
+
+Build dependencies (auto-resolved by build.ps1):
+- **Sampler**: Framework for the build pipeline
+- **ModuleBuilder**: Compiles module source into output
+- **Pester**: Testing framework
+- **PSScriptAnalyzer**: Code analysis and linting
+- **InvokeBuild**: Task execution engine
+- **ChangelogManagement**: Changelog generation
+
+These are installed from PowerShell Gallery during the first build run.
