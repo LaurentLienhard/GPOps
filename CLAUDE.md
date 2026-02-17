@@ -166,6 +166,206 @@ But can also use full prefix for consistency:
 - Use `try/catch` blocks with specific exception types when possible
 - Use `[SuppressMessageAttribute()]` to bypass PSScriptAnalyzer rules only when justified
 
+#### Error Handling and Exception Management - REQUIRED
+
+**All functions and methods MUST implement comprehensive error handling to maximize code security and reliability.** Every potential failure point must be protected with appropriate exception handling.
+
+**Core Principles:**
+- **Catch specific exceptions first**: Always catch specific exception types before generic `[System.Exception]`
+- **Fail fast with `ErrorAction = 'Stop'`**: Set `-ErrorAction Stop` on all external commands to catch errors immediately
+- **Use try-catch-finally**: Ensure cleanup happens regardless of success or failure
+- **Provide context in error messages**: Include relevant variable values and operation context
+- **Log errors appropriately**: Use `Write-Error` for terminating errors, `Write-Warning` for non-terminating issues
+- **Test error paths**: Write tests for failure scenarios, not just success paths
+
+**Exception Handling Strategy:**
+
+```powershell
+function Get-GPOpsData
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    try
+    {
+        Write-Verbose "Attempting to retrieve GPO data for: $Name"
+
+        # Set ErrorAction to Stop to catch errors immediately
+        $gpo = Get-GPO -Name $Name -ErrorAction Stop
+
+        if ($null -eq $gpo)
+        {
+            throw [System.InvalidOperationException]"GPO '$Name' not found in Active Directory"
+        }
+
+        Write-Verbose "Successfully retrieved GPO: $($gpo.DisplayName)"
+        return $gpo
+    }
+    catch [System.UnauthorizedAccessException]
+    {
+        $errorMsg = "Access denied while retrieving GPO '$Name'. Verify credentials and permissions."
+        Write-Error -Message $errorMsg -ErrorAction Stop
+    }
+    catch [System.InvalidOperationException]
+    {
+        $errorMsg = $_
+        Write-Error -Message $errorMsg -ErrorAction Stop
+    }
+    catch [System.Exception]
+    {
+        $errorMsg = "Unexpected error retrieving GPO '$Name': $($_.Exception.Message)"
+        Write-Error -Message $errorMsg -ErrorAction Stop
+    }
+    finally
+    {
+        Write-Verbose "Cleanup: Completed GPO retrieval operation"
+    }
+}
+```
+
+**Specific Exception Types to Handle:**
+
+| Exception Type | Common Cause | Action |
+|---|---|---|
+| `System.UnauthorizedAccessException` | Permission denied, access control | Terminate with clear permission error |
+| `System.InvalidOperationException` | Invalid state or operation | Terminate with context about invalid state |
+| `System.ArgumentException` | Invalid parameter | Terminate with parameter validation details |
+| `System.ObjectNotFoundException` | Resource not found | Handle gracefully or terminate based on function logic |
+| `System.TimeoutException` | Operation timeout | Retry or terminate with timeout message |
+| `System.IO.IOException` | File system operation failed | Terminate with file operation details |
+| `System.Net.WebException` | Network/API call failed | Retry or terminate with network error details |
+
+**Error Messages - REQUIRED FORMAT:**
+
+Always provide context in error messages:
+```powershell
+# ❌ AVOID: Generic messages
+throw "Error"
+Write-Error "Failed"
+
+# ✅ REQUIRED: Contextual messages with variable values
+throw [System.InvalidOperationException]"Cannot link GPO '$($gpo.DisplayName)' (ID: $($gpo.Id)) to OU '$OuPath': Access denied"
+
+# ✅ REQUIRED: Include operation context
+Write-Error "Failed to backup GPO settings for '$GpoName' in domain '$($env:USERDOMAIN)'. Ensure backup path '$BackupPath' is writable and has sufficient disk space."
+```
+
+**Advanced Error Handling Patterns:**
+
+**Pattern 1: Graceful Degradation**
+```powershell
+try
+{
+    $result = Get-ADObject -Filter "objectClass -eq 'groupPolicyContainer'" -ErrorAction Stop
+}
+catch [System.UnauthorizedAccessException]
+{
+    Write-Warning "Cannot access Active Directory. Attempting local fallback..."
+    $result = Get-ChildItem -Path 'HKLM:\Software\Policies' -ErrorAction Stop
+}
+catch [System.Exception]
+{
+    Write-Error "Both AD query and local fallback failed: $($_.Exception.Message)" -ErrorAction Stop
+}
+```
+
+**Pattern 2: Validation with Detailed Error Context**
+```powershell
+try
+{
+    if ([string]::IsNullOrWhiteSpace($GpoName))
+    {
+        throw [System.ArgumentException]"Parameter 'GpoName' cannot be null, empty, or whitespace"
+    }
+
+    if (-not (Test-Path -Path $BackupPath))
+    {
+        throw [System.IO.IOException]"Backup path '$BackupPath' does not exist or is inaccessible"
+    }
+
+    $gpo = Get-GPO -Name $GpoName -ErrorAction Stop
+}
+catch [System.ArgumentException]
+{
+    Write-Error -Message "Invalid parameter: $_" -Category InvalidArgument -ErrorAction Stop
+}
+catch [System.IO.IOException]
+{
+    Write-Error -Message "File system error: $_" -Category OpenError -ErrorAction Stop
+}
+catch [System.Exception]
+{
+    Write-Error -Message "Unexpected error during validation: $($_.Exception.Message)" -ErrorAction Stop
+}
+```
+
+**Pattern 3: Resource Cleanup (try-finally)**
+```powershell
+$connection = $null
+
+try
+{
+    $connection = Connect-Domain -ComputerName $Server -ErrorAction Stop
+    $result = Invoke-RemoteCommand -Connection $connection -Script $ScriptBlock -ErrorAction Stop
+    return $result
+}
+catch [System.Exception]
+{
+    Write-Error "Operation failed on server '$Server': $($_.Exception.Message)" -ErrorAction Stop
+}
+finally
+{
+    if ($null -ne $connection)
+    {
+        try
+        {
+            Disconnect-Domain -Connection $connection -ErrorAction SilentlyContinue
+        }
+        catch
+        {
+            Write-Warning "Failed to properly close connection to '$Server'"
+        }
+    }
+}
+```
+
+**Testing Error Handling - REQUIRED:**
+
+Every catch block must be tested:
+```powershell
+Describe 'Get-GPOpsData Error Handling' {
+    Context 'When Access Denied' {
+        BeforeEach {
+            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith {
+                throw [System.UnauthorizedAccessException]"Access Denied"
+            }
+        }
+
+        It 'throws UnauthorizedAccessException with context' {
+            { Get-GPOpsData -Name 'TestGPO' } | Should -Throw -ExceptionType ([System.UnauthorizedAccessException])
+        }
+
+        It 'logs permission error message' {
+            try { Get-GPOpsData -Name 'TestGPO' } catch { }
+            Assert-MockCalled -CommandName Write-Error -Times 1 -Scope It
+        }
+    }
+
+    Context 'When GPO Not Found' {
+        BeforeEach {
+            Mock -CommandName Get-GPO -ModuleName GPOps -MockWith { return $null }
+        }
+
+        It 'throws InvalidOperationException' {
+            { Get-GPOpsData -Name 'NonExistent' } | Should -Throw -ExceptionType ([System.InvalidOperationException])
+        }
+    }
+}
+```
+
 #### Code Formatting (VSCode PowerShell Extension)
 **Brace Placement:**
 - Opening braces on new line: `OpenBraceOnSameLine = false`
