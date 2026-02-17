@@ -1,0 +1,10 @@
+# Deployment configuration with sensitive server information
+config.json
+
+# Local deployment logs
+*.log
+deployment-*.txt
+
+# Temporary files
+*.tmp
+*.temp

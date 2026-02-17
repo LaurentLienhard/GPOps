@@ -1,0 +1,23 @@
+{
+  "LocalDestinations": [
+    "$env:ProgramFiles\\PowerShell\\Modules\\GPOps",
+    "C:\\MyModules\\GPOps"
+  ],
+  "RemoteServers": [
+    {
+      "ComputerName": "prod-server-01",
+      "DestinationPath": "C:\\Program Files\\PowerShell\\Modules\\GPOps",
+      "CredentialKey": "prod-servers"
+    },
+    {
+      "ComputerName": "prod-server-02",
+      "DestinationPath": "C:\\Program Files\\PowerShell\\Modules\\GPOps",
+      "CredentialKey": "prod-servers"
+    },
+    {
+      "ComputerName": "staging-server-01",
+      "DestinationPath": "C:\\Modules\\GPOps",
+      "CredentialKey": "staging-servers"
+    }
+  ]
+}

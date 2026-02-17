@@ -59,6 +59,11 @@ BuildWorkflow:
 
     - package_module_nupkg
 
+  # Deploy module to configured local and remote destinations
+  deploy:
+    - build
+    - Deploy_GPOpsModule
+
 
 
   # Defining test task to be run when invoking `./build.ps1 -Tasks test`
