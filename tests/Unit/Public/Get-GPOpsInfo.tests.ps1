@@ -297,36 +297,7 @@ Describe 'Get-GPOpsInfo' {
         }
     }
 
-    Context 'Remote execution - configuration' {
-        It 'accepts ComputerName parameter' {
-            { Get-GPOpsInfo -Name 'Test' -ComputerName 'DC01' -ErrorAction SilentlyContinue } |
-                Should -Not -Throw
-        }
-
-        It 'accepts Credential parameter' {
-            $cred = New-Object System.Management.Automation.PSCredential(
-                'user',
-                (ConvertTo-SecureString 'pass' -AsPlainText -Force)
-            )
-
-            { Get-GPOpsInfo -Name 'Test' -ComputerName 'DC01' -Credential $cred -ErrorAction SilentlyContinue } |
-                Should -Not -Throw
-        }
-
-        It 'shows help for ComputerName parameter' {
-            (Get-Help Get-GPOpsInfo).Parameters.Parameter |
-                Where-Object { $_.Name -eq 'ComputerName' } |
-                Should -Not -BeNullOrEmpty
-        }
-
-        It 'shows help for Credential parameter' {
-            (Get-Help Get-GPOpsInfo).Parameters.Parameter |
-                Where-Object { $_.Name -eq 'Credential' } |
-                Should -Not -BeNullOrEmpty
-        }
-    }
-
-    Context 'Local execution behavior' {
+    Context 'Execution behavior' {
         BeforeEach {
             Mock -CommandName Get-GPO -MockWith {
                 return @{
@@ -338,33 +309,18 @@ Describe 'Get-GPOpsInfo' {
             }
         }
 
-        It 'executes locally when ComputerName not specified' {
+        It 'executes and retrieves GPOs' {
             $result = Get-GPOpsInfo -Name 'Test'
 
             $result | Should -Not -BeNullOrEmpty
             Assert-MockCalled -CommandName Get-GPO -Times 1 -Scope It
         }
 
-        It 'returns GPO objects for local execution' {
+        It 'returns GPO objects' {
             $result = Get-GPOpsInfo -Name 'Test'
 
             $result | Should -BeOfType GPO
             $result.DisplayName | Should -Be 'Local GPO'
-        }
-    }
-
-    Context 'Remote parameter support' {
-        It 'does not call Get-GPO when ComputerName is specified' {
-            Mock -CommandName Get-GPO
-
-            Get-GPOpsInfo -Name 'Test' -ComputerName 'DC01' -ErrorAction SilentlyContinue
-
-            Assert-MockCalled -CommandName Get-GPO -Times 0 -Scope It
-        }
-
-        It 'throws appropriate error for remote execution without WinRM' {
-            { Get-GPOpsInfo -Name 'Test' -ComputerName 'DC01' -ErrorAction Stop } |
-                Should -Throw
         }
     }
 }
